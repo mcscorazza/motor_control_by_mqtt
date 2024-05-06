@@ -83,7 +83,7 @@ rule ASM_EXECUTABLE_LINKER__bs2_default_Release
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = "C:\Program Files\Raspberry Pi\Pico SDK v1.5.1\cmake\bin\cmake.exe" --regenerate-during-build -SM:\DEV\UNISAL\Eletronica_Embarcada_IoT\motor_control_by_mqtt -BM:\DEV\UNISAL\Eletronica_Embarcada_IoT\motor_control_by_mqtt\build
+  command = "C:\Program Files\Raspberry Pi\Pico SDK v1.5.1\cmake\bin\cmake.exe" --regenerate-during-build -SC:\dev\unisal\Eletronica_Embarcada_IoT\motor_control_by_mqtt -BC:\dev\unisal\Eletronica_Embarcada_IoT\motor_control_by_mqtt\build
   description = Re-running CMake...
   generator = 1
 

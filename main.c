@@ -18,11 +18,11 @@
 #define A2 17
 
 int duty = 100;
-char sentido;
+char direction;
 
 struct mqtt_connect_client_info_t mqtt_client_info=
 {
-  "CORERasp/pico_w",  /*client id*/
+  "corazza/pico_w",  /*client id*/
   NULL,               /* user */
   NULL,               /* pass */
   0,                  /* keep alive */
@@ -40,7 +40,7 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
     memset(motor, "\0", 30);
     strncpy(motor, data, len);
 
-    sentido = motor[0];
+    direction = motor[0];
     int i = 1;
     while (motor[i] != '\0') {
         if (isdigit(motor[i])) {
@@ -55,14 +55,14 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
             i++;
         }
     }
-
-    if (sentido == 'H'){
-      printf("\nSentido do motor: horário\n");
+    printf("------------------------------------------------\n");
+    if (direction == 'W'){
+      printf("Motor Direction: CW\n");
     }
-    else if (sentido == 'A') {
-      printf("\nSentido do motor: anti-horário\n");
+    else if (direction == 'C') {
+      printf("Motor Direction: CCW\n");
     } else {
-      printf("\nSentido do motor: ERRO\n");
+      printf("Motor Direction: ERROR!\n");
     }
 
     if (duty < 0){
@@ -70,78 +70,79 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
     } else if (duty > 100){
       duty = 100;
     }
-    printf("\nPorcentagem da potência setada: %d\n", duty);
+    printf("Power percentage: %d\n", duty);
+    printf("------------------------------------------------\n\n");
 }
   
 static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len) {
-  printf("topic %s\n", topic);
+  printf("\nIncoming info form topic %s: \n", topic);
 }
  
 static void mqtt_request_cb(void *arg, err_t err) { 
-  printf(("MQTT client request cb: err %d\n", (int)err));
+  printf(("MQTT client request cb: err %d \n", (int)err));
 }
  
 static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status) {
-  printf(("MQTT client connection cb: status %d\n", (int)status));
+  printf(("MQTT client connection cb: status %d \n", (int)status));
 
   if (status == MQTT_CONNECT_ACCEPTED) {
-    err_t erro = mqtt_sub_unsub(client, "motor/control", 0, &mqtt_request_cb, NULL, 1); //1 se inscreve - 0 de desinscreve
+    err_t erro = mqtt_sub_unsub(client, "corazza/control", 0, &mqtt_request_cb, NULL, 1); //1 se inscreve - 0 de desinscreve
     
     if (erro == ERR_OK) {
-      printf("Inscrito com Sucesso!\n");
+      printf("Success subscribed!\n");
     } else {
-      printf("Falha ao se inscrever!\n");
+      printf("Subscribe fail!\n");
     }
   } else {
-    printf("Conexão rejeitada\n");
+    printf("Subscribe rejected!\n");
   }
 }
  
 int main(){
   stdio_init_all();           //Configuração inicial da placa
-  printf("Iniciando...\n");   //Informativo
+  printf("Starting...\n");   //Informativo
 
   //Iniciando o chip WiFi
   if (cyw43_arch_init()){
-    printf("Falha ao Iniciar chip WiFi\n");
+    printf("Fail to init CYW43!\n");
     return 1;
   }
 
   //Configurando a placa como cliente
   cyw43_arch_enable_sta_mode();
-  printf("Conectando ao %s\n",WIFI_SSID);
+  printf("Connecting to %s...\n",WIFI_SSID);
 
   //Conectando ao roteador
   if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK, 30000)){
-    printf("Falha ao conectar\n");
+    printf("Fail to WiFi connection!\n");
     return 1;
   }
-  printf("Conectado ao WiFi %s\n",WIFI_SSID);
+  printf("WiFi Connected: %s\n",WIFI_SSID);
 
   //Conectando ao MQTT
   ip_addr_t addr;
   if(!ip4addr_aton(MQTT_SERVER, &addr)){
-    printf("ip error\n");
+    printf("IP error\n");
     return 1;
   }
-  printf("Conectando ao MQTT\n");
+  printf("Connecting to MQTT...\n");
 
   mqtt_client_t* cliente_mqtt = mqtt_client_new();    //Criando novo cliente
   mqtt_set_inpub_callback(cliente_mqtt, &mqtt_incoming_publish_cb, &mqtt_incoming_data_cb, NULL);   //Lincando as callbacks de envio e recebimento de dados
   err_t erro = mqtt_client_connect(cliente_mqtt, &addr, 1883, &mqtt_connection_cb, NULL, &mqtt_client_info);
   if(erro != ERR_OK){
-    printf("Erro de conexão\n");
+    printf("MQTT Connection Error!\n");
     return 1;
   }
 
-  printf("Conectado ao MQTT!\n");
+  printf("MQTT Connected!\n");
 
   //PWM
   gpio_set_function(EN_A, GPIO_FUNC_PWM);
-  int fatia_pwm = pwm_gpio_to_slice_num(EN_A);
+  int slice_pwm = pwm_gpio_to_slice_num(EN_A);
   pwm_config config = pwm_get_default_config();
   pwm_config_set_clkdiv(&config, 4.0f);
-  pwm_init(fatia_pwm, &config, true);
+  pwm_init(slice_pwm, &config, true);
 
   gpio_init(A1);
   gpio_init(A2);
@@ -150,28 +151,17 @@ int main(){
   gpio_set_dir(A2, GPIO_OUT);
 
   while(true){
-    printf("Crie uma subscription com o nome INFO/button e aperte o botão bootsel de sua placa para mais informações!\n");
-    if (board_button_read()){
-      mqtt_publish(cliente_mqtt, "INFO/button", "Envie um Plaintext como motor/control", 37, 0, false, &mqtt_request_cb, NULL);
-      sleep_ms(100);
-      mqtt_publish(cliente_mqtt, "INFO/button", "H para horário, A para anti-horário + porcentagem desejada", 58, 0, false, &mqtt_request_cb, NULL);
-      sleep_ms(100);
-      mqtt_publish(cliente_mqtt, "INFO/button", "Ex: H 50, A 100, H 75...", 24, 0, false, &mqtt_request_cb, NULL);
-      sleep_ms(100);
-    }
-
+    printf("Send a PlainText to 'corazza/control' with W [CW] or C [CCW] + Percentage\n");
     int duty_cycle = ((duty*65535)/(100));
-
-    if (sentido == 'H'){
+    if (direction == 'W'){
       gpio_put(A1, true);
       gpio_put(A2, false);
       pwm_set_gpio_level(EN_A, duty_cycle);
-    } else if (sentido == 'A'){
+    } else if (direction == 'C'){
       gpio_put(A1, false);
       gpio_put(A2, true);
       pwm_set_gpio_level(EN_A, duty_cycle);
     }
-
     sleep_ms(1000);
   }
 }
